@@ -1095,7 +1095,20 @@ class MiniGridEnv(gym.Env):
         world_cell = self.grid.get(x, y)
 
         return obs_cell is not None and obs_cell.type == world_cell.type
+    
+    # XXX: new 
+    def reward_condition(self, fwd_cell):
+        print("entering reward condition")
+        done = False
+        reward = 0 
+        if fwd_cell != None and fwd_cell.type == 'goal':
+            done = True
+            reward = self._reward()
+        return done, reward 
 
+    def reset_reward_condition(self):
+        pass     
+    
     def step(self, action):
         self.step_count += 1
 
@@ -1117,16 +1130,37 @@ class MiniGridEnv(gym.Env):
         # Rotate right
         elif action == self.actions.right:
             self.agent_dir = (self.agent_dir + 1) % 4
+        
+        # NOTE: this part presupposes that a goal can only be defined
+        # in terms of a "goal" cell.
+        # TODO: can the trigger of rewards be detemined by a custom
+        # function?
 
         # Move forward
         elif action == self.actions.forward:
             if fwd_cell == None or fwd_cell.can_overlap():
                 self.agent_pos = fwd_pos
-            if fwd_cell != None and fwd_cell.type == 'goal':
-                done = True
-                reward = self._reward()
+            
+            # TODO: replace with custom functin?
+            # 1) call custom function, which gives reward and done/or not 
+            # 2) if done, then call a reset to reset the state of the custom 
+            # function. This is applicable if the reward function calculates
+            # the reward as a function of prior states.
+            
+            # NOTE: normally, what's below should be the default.
+            # if fwd_cell != None and fwd_cell.type == 'goal':
+            #     done = True
+            #     reward = self._reward()
+            
+            done, reward = self.reward_condition(fwd_cell)
+
             if fwd_cell != None and fwd_cell.type == 'lava':
                 done = True
+
+            # if we're done with the game, then reset the reward_conditon 
+            # states.
+            if done:
+                self.reset_reward_condition() 
 
         # Pick up an object
         elif action == self.actions.pickup:
