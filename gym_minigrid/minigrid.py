@@ -1097,8 +1097,7 @@ class MiniGridEnv(gym.Env):
         return obs_cell is not None and obs_cell.type == world_cell.type
     
     # XXX: new 
-    def reward_condition(self, fwd_cell):
-        print("entering reward condition")
+    def reward_condition(self, fwd_cell, fwd_pos):
         done = False
         reward = 0 
         if fwd_cell != None and fwd_cell.type == 'goal':
@@ -1152,7 +1151,7 @@ class MiniGridEnv(gym.Env):
             #     done = True
             #     reward = self._reward()
             
-            done, reward = self.reward_condition(fwd_cell)
+            done, reward = self.reward_condition(fwd_cell, fwd_pos)
 
             if fwd_cell != None and fwd_cell.type == 'lava':
                 done = True
