@@ -69,9 +69,13 @@ class FourRoomsEnv(MiniGridEnv):
             self.put_obj(goal, *self._goal_default_pos)
             goal.init_pos, goal.cur_pos = self._goal_default_pos
         else:
-            self.place_obj(Goal())
+            goal = Goal()
+            goal_pos = self.place_obj(goal)
 
         self.mission = 'Reach the goal'
+
+        # Useful for ToRoom 
+        self.goal_cur_pos = goal.cur_pos
 
     def step(self, action):
         obs, reward, done, info = MiniGridEnv.step(self, action)
@@ -81,54 +85,42 @@ class FourRoomsEnv(MiniGridEnv):
 """
 Below are implementations of the four-room environment with different sub-goals
 """
-class FourRoomsEnv_ToRoom(FourRoomsEnv):
+class FourRoomsEnv_ToRoomWithGoal(FourRoomsEnv):
     """
     An environment where you get a reward for navigating to a specific room
     """
-    def __init__(self, target_room_quad_x, target_room_quad_y, 
-                agent_pos=None, goal_pos=None):
+    def __init__(self, agent_pos=None, goal_pos=None):
         super().__init__(agent_pos, goal_pos)
-        
-        self.quadrant_x = target_room_quad_x 
-        self.quadrant_y = target_room_quad_y
-        
-    # overwriting 
+
+        # self.quadrant_x = target_room_quad_x
+        # self.quadrant_y = target_room_quad_y
+
+    def goal_quadrant(self):
+        quadrant_x = int(self.goal_cur_pos[0]/self.room_w)
+        quadrant_y = int(self.goal_cur_pos[1]/self.room_h)
+        return quadrant_x, quadrant_y
+    # overwriting
     def reward_condition(self, fwd_cell, fwd_pos):
         """
         This checks to see if the agent is within the correct room.
-        compares the fwd_cell to the raw coordinates 
+        compares the fwd_cell to the raw coordinates
         """
-
+        goal_quadrant_x, goal_quadrant_y = self.goal_quadrant()
         # check if the fwd_cell is in the right position
-        done = False 
-        if fwd_pos[0] > self.quadrant_x * self.room_w and \
-            fwd_pos[0] < (self.quadrant_x + 1)*self.room_w and \
-            fwd_pos[1] > self.quadrant_y * self.room_h and \
-            fwd_pos[1] < (self.quadrant_y+1)*self.room_h: 
+        done = False
+        if fwd_pos[0] > goal_quadrant_x * self.room_w and \
+            fwd_pos[0] < (goal_quadrant_x + 1)*self.room_w and \
+            fwd_pos[1] > goal_quadrant_y * self.room_h and \
+            fwd_pos[1] < (goal_quadrant_y+1)*self.room_h:
             done = True
             return done, self._reward()
-        return done, 0 
-        
-    # overwriting 
-    def reset_reward_condition(self): 
+        return done, 0
+
+    # overwriting
+    def reset_reward_condition(self):
         pass
 
-# same environment, different target rooms.
-class FourRoomsEnv_ToRoom1(FourRoomsEnv_ToRoom): 
-    def __init__(self, agent_pos=None, goal_pos=None):
-        super().__init__(0, 0, agent_pos, goal_pos)
 
-class FourRoomsEnv_ToRoom2(FourRoomsEnv_ToRoom): 
-    def __init__(self, agent_pos=None, goal_pos=None):
-        super().__init__(1, 0, agent_pos, goal_pos)
-
-class FourRoomsEnv_ToRoom3(FourRoomsEnv_ToRoom): 
-    def __init__(self, agent_pos=None, goal_pos=None):
-        super().__init__(0, 1, agent_pos, goal_pos)
-
-class FourRoomsEnv_ToRoom4(FourRoomsEnv_ToRoom): 
-    def __init__(self, agent_pos=None, goal_pos=None):
-        super().__init__(1, 1, agent_pos, goal_pos)
 
 class FourRoomsEnv_Get2Goal(FourRoomsEnv):
     """
@@ -144,28 +136,28 @@ class FourRoomsEnv_Get2Goal(FourRoomsEnv):
             quadrant_x = int(pos[0] / self.room_w )
             quadrant_y = int(pos[1] / self.room_h )
             return quadrant_x, quadrant_y 
-        
+
         quad_x, quad_y = to_room_bounds(self.agent_pos)
-        
+
         def reject (env, pos):
-            
+
             if pos[0] > quad_x * self.room_w and \
                 pos[0] < (quad_x + 1)*self.room_w and \
                 pos[1] > quad_y * self.room_h and \
                 pos[1] < (quad_y+1)*self.room_h: 
-            
+
                 return False # Within the same room
-                
+
             return True # rejecting everything else 
-         
+
         if self._goal_default_pos is not None:
             goal = Goal()
             self.put_obj(goal, *self._goal_default_pos) 
             goal.init_pos, goal.cur_pos = self._goal_default_pos
         else:
             self.place_obj(Goal(), reject_fn=reject)
-       
-        self.mission = 'Reach the goal' 
+
+        self.mission = 'Reach the goal'
 
 register(
     id='MiniGrid-FourRooms-v0',
@@ -173,21 +165,10 @@ register(
 )
 
 register(
-    id='MiniGrid-FourRooms-ToRoom1-v0',
-    entry_point='gym_minigrid.envs:FourRoomsEnv_ToRoom1'
-) 
-register(
-    id='MiniGrid-FourRooms-ToRoom2-v0',
-    entry_point='gym_minigrid.envs:FourRoomsEnv_ToRoom2'
-) 
-register(
-    id='MiniGrid-FourRooms-ToRoom3-v0',
-    entry_point='gym_minigrid.envs:FourRoomsEnv_ToRoom3'
-) 
-register(
-    id='MiniGrid-FourRooms-ToRoom4-v0',
-    entry_point='gym_minigrid.envs:FourRoomsEnv_ToRoom4'
-) 
+    id='MiniGrid-FourRooms-ToRoomWithGoal-v0',
+    entry_point='gym_minigrid.envs:FourRoomsEnv_ToRoomWithGoal'
+)
+
 register(
     id='MiniGrid-FourRooms-Get2Goal-v0',
     entry_point='gym_minigrid.envs:FourRoomsEnv_Get2Goal'
