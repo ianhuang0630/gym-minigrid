@@ -1268,7 +1268,9 @@ class MiniGridEnv(gym.Env):
 
         return img
 
-    def render(self, mode='human', close=False, highlight=True, tile_size=TILE_PIXELS):
+    # NOTE: can you add something that shows the place within the sequence?
+    # TODO: perhaps adding more optional parameters
+    def render(self, mode='human', close=False, highlight=True, tile_size=TILE_PIXELS, title=None):
         """
         Render the whole-grid human view
         """
@@ -1323,7 +1325,10 @@ class MiniGridEnv(gym.Env):
 
         if mode == 'human':
             self.window.show_img(img)
-            self.window.set_caption(self.mission)
+            if title is None:
+                self.window.set_caption(self.mission)
+            else:
+                self.window.set_caption(title)
 
         return img
 
