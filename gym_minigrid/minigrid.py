@@ -1324,11 +1324,19 @@ class MiniGridEnv(gym.Env):
         )
 
         if mode == 'human':
+            width, height = self.window.fig.get_size_inches() * self.window.fig.get_dpi()
+            width, height = int(width), int(height)
             self.window.show_img(img)
+            
             if title is None:
                 self.window.set_caption(self.mission)
             else:
                 self.window.set_caption(title)
+            
+            # for saving
+            wholefig = np.frombuffer(self.window.fig.canvas.tostring_rgb(), dtype='uint8').reshape(height, width, 3)
+            
+            return wholefig
 
         return img
 
