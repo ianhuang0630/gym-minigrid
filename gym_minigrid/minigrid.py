@@ -6,6 +6,7 @@ import numpy as np
 from gym import error, spaces, utils
 from gym.utils import seeding
 from .rendering import *
+from copy import deepcopy
 
 # Size in pixels of a tile in the full-scale human view
 TILE_PIXELS = 32
@@ -281,7 +282,6 @@ class Key(WorldObj):
 
     def render(self, img):
         c = COLORS[self.color]
-
         # Vertical quad
         fill_coords(img, point_in_rect(0.50, 0.63, 0.31, 0.88), c)
 
@@ -680,6 +680,8 @@ class MiniGridEnv(gym.Env):
         self.observation_space = spaces.Dict({
             'image': self.observation_space
         })
+        # also include a variable for whether it has a key, as well as the identity of the key.
+        self.key = -1 # -1 means no key. Any other value refers to the color of the key.
 
         # Range of possible rewards
         self.reward_range = (0, 1)
@@ -1095,19 +1097,30 @@ class MiniGridEnv(gym.Env):
         world_cell = self.grid.get(x, y)
 
         return obs_cell is not None and obs_cell.type == world_cell.type
-    
-    # XXX: new 
+
     def reward_condition(self, fwd_cell, fwd_pos):
         done = False
-        reward = 0 
+        reward = 0
         if fwd_cell != None and fwd_cell.type == 'goal':
             done = True
             reward = self._reward()
-        return done, reward 
+        return done, reward
 
     def reset_reward_condition(self):
-        pass     
-    
+        pass
+
+    def reward_condition_postaction(self, prev_fwd_cell, action, fwd_cell, reward, obs):
+        """
+        This gets executed if the reward condition can only be evaluated after the action is taken
+        """
+        return False, reward
+
+    def reset_reward_condition_postaction(self):
+        """
+        This is the reset correspodning to 
+        """
+        pass
+
     def step(self, action):
         self.step_count += 1
 
@@ -1119,6 +1132,7 @@ class MiniGridEnv(gym.Env):
 
         # Get the contents of the cell in front of the agent
         fwd_cell = self.grid.get(*fwd_pos)
+        prev_fwd_cell = deepcopy(fwd_cell)
 
         # Rotate left
         if action == self.actions.left:
@@ -1129,51 +1143,40 @@ class MiniGridEnv(gym.Env):
         # Rotate right
         elif action == self.actions.right:
             self.agent_dir = (self.agent_dir + 1) % 4
-        
-        # NOTE: this part presupposes that a goal can only be defined
-        # in terms of a "goal" cell.
-        # TODO: can the trigger of rewards be detemined by a custom
-        # function?
 
         # Move forward
         elif action == self.actions.forward:
             if fwd_cell == None or fwd_cell.can_overlap():
                 self.agent_pos = fwd_pos
-            
-            # TODO: replace with custom functin?
-            # 1) call custom function, which gives reward and done/or not 
-            # 2) if done, then call a reset to reset the state of the custom 
-            # function. This is applicable if the reward function calculates
-            # the reward as a function of prior states.
-            
+
             # NOTE: normally, what's below should be the default.
             # if fwd_cell != None and fwd_cell.type == 'goal':
             #     done = True
             #     reward = self._reward()
-            
-            done, reward = self.reward_condition(fwd_cell, fwd_pos)
-
-            if fwd_cell != None and fwd_cell.type == 'lava':
-                done = True
-
-            # if we're done with the game, then reset the reward_conditon 
-            # states.
-            if done:
-                self.reset_reward_condition() 
 
         # Pick up an object
         elif action == self.actions.pickup:
             if fwd_cell and fwd_cell.can_pickup():
+                # every single time an object is picked up, update the state.
+                # verify fwd cell is a key before udpate
                 if self.carrying is None:
                     self.carrying = fwd_cell
                     self.carrying.cur_pos = np.array([-1, -1])
                     self.grid.set(*fwd_pos, None)
+                    if isinstance(self.carrying, Key):
+                        self.key = COLOR_TO_IDX[fwd_cell.color]
+                    fwd_cell = None
 
         # Drop an object
         elif action == self.actions.drop:
             if not fwd_cell and self.carrying:
+                # every single time an object is dropped, update the state.
+                # verify self.carry == key is a key before update
+                if isinstance(self.carrying, Key):
+                    self.key = -1
                 self.grid.set(*fwd_pos, self.carrying)
                 self.carrying.cur_pos = fwd_pos
+                fwd_cell = self.carrying
                 self.carrying = None
 
         # Toggle/activate an object
@@ -1184,15 +1187,31 @@ class MiniGridEnv(gym.Env):
         # Done action (not used by default)
         elif action == self.actions.done:
             pass
-
         else:
             assert False, "unknown action"
 
         if self.step_count >= self.max_steps:
             done = True
 
+        if not done:  # if not done by the usual factors
+            done, reward = self.reward_condition(fwd_cell, fwd_pos)
+            if fwd_cell != None and fwd_cell.type == 'lava':
+                done = True
+
+        # if we're done with the game, then reset the reward_conditon 
+        # states.
+        if done:
+            self.reset_reward_condition()
+
         obs = self.gen_obs()
 
+        # post-actions, based on new observations
+        if not done:  # if not done according to the reward_condition, run the post-action reward_condition.
+            done, reward = self.reward_condition_postaction(prev_fwd_cell, action, fwd_cell, reward, obs)
+            if done:
+                self.reset_reward_condition_postaction()
+        if done:
+            self.key = -1  # resetting
         return obs, reward, done, {}
 
     def gen_obs_grid(self):
@@ -1221,7 +1240,7 @@ class MiniGridEnv(gym.Env):
         # in the agent's partially observable view
         agent_pos = grid.width // 2, grid.height - 1
         if self.carrying:
-            grid.set(*agent_pos, self.carrying)
+            grid.set(*agent_pos, self.carrying) # NOTE: THAT THE KEY INFORMATION IS EFFECTIVELY ENCODED.
         else:
             grid.set(*agent_pos, None)
 
@@ -1243,12 +1262,18 @@ class MiniGridEnv(gym.Env):
         # - an image (partially observable view of the environment)
         # - the agent's direction/orientation (acting as a compass)
         # - a textual mission string (instructions for the agent)
+
+        # obs = {
+        #     'image': image,
+        #     'direction': self.agent_dir,
+        #     'mission': self.mission
+        # }
         obs = {
             'image': image,
             'direction': self.agent_dir,
-            'mission': self.mission
+            'mission': self.mission,
+            'key': self.key
         }
-
         return obs
 
     def get_obs_render(self, obs, tile_size=TILE_PIXELS//2):
@@ -1269,7 +1294,7 @@ class MiniGridEnv(gym.Env):
         return img
 
     # NOTE: can you add something that shows the place within the sequence?
-    # TODO: perhaps adding more optional parameters
+    # perhaps adding more optional parameters
     def render(self, mode='human', close=False, highlight=True, tile_size=TILE_PIXELS, title=None):
         """
         Render the whole-grid human view
@@ -1327,15 +1352,15 @@ class MiniGridEnv(gym.Env):
             width, height = self.window.fig.get_size_inches() * self.window.fig.get_dpi()
             width, height = int(width), int(height)
             self.window.show_img(img)
-            
+
             if title is None:
                 self.window.set_caption(self.mission)
             else:
                 self.window.set_caption(title)
-            
+
             # for saving
             wholefig = np.frombuffer(self.window.fig.canvas.tostring_rgb(), dtype='uint8').reshape(height, width, 3)
-            
+
             return wholefig
 
         return img

@@ -38,7 +38,6 @@ class KeyCorridor(RoomGrid):
 
         # Add a key in a random room on the left side
         self.add_object(0, self._rand_int(0, self.num_rows), 'key', door.color)
-        
         # Place the agent in the middle
         self.place_agent(1, self.num_rows // 2)
 
