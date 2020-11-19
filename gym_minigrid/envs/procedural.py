@@ -29,7 +29,9 @@ class ProceduralEnv(RoomGrid):
         self.room_size = room_size
         self.room2pos = room2pos
         self.dir2dooridx = {'right': 0, 'down': 1, 'left': 2, 'up': 2}
-        
+
+        self.collected_keys = set([])
+
         super().__init__(room_size=room_size,
                          num_rows=num_rows,
                          num_cols=num_cols,
@@ -108,9 +110,18 @@ class ProceduralEnv(RoomGrid):
             key_attained = False
             if isinstance(prev_fwd_cell, Key) and fwd_cell is None:
                 key_attained = isinstance(self.carrying, Key)
+                if key_attained:
+                    # ask has it already been collected?
+                    if self.carrying.color in self.collected_keys:
+                        key_attained = False
+                    else:
+                        # key_attained remains true, but remember that you picked up the key
+                        self.collected_keys.add(self.carrying.color)
+
             if key_attained and self.subtask_idx != len(self.task_sequence):
                 self.subtask_idx += 1
                 score_incremented = True
+
         # if door is unlocked: need prior states!
         elif curr_subtask.id == 'unlock_correct_door':
             unlocked = False
@@ -128,6 +139,8 @@ class ProceduralEnv(RoomGrid):
         return done, reward
 
     def reset_reward_condition_postaction(self):
+        # resetting collected key ids
+        self.collected_keys = set([])
         self.subtask_idx = 0
 
     def reward_condition(self, fwd_cell, fwd_pos):
